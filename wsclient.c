@@ -531,6 +531,10 @@ void *libwsclient_helper_socket_thread(void *ptr) {
 }
 
 wsclient *libwsclient_new(const char *URI) {
+  return libwsclient_new_extra(URI,NULL);
+}
+
+wsclient *libwsclient_new_extra(const char *URI,const char *origin) {
 	wsclient *client = NULL;
 
 	client = (wsclient *)malloc(sizeof(wsclient));
@@ -555,6 +559,18 @@ wsclient *libwsclient_new(const char *URI) {
 	}
 	memset(client->URI, 0, strlen(URI)+1);
 	strncpy(client->URI, URI, strlen(URI));
+	if(origin) {
+    client->origin = (char *)malloc(strlen(origin)+1);
+  	if(!client->origin) {
+  		fprintf(stderr, "Unable to allocate memory in libwsclient_new.\n");
+  		exit(WS_EXIT_MALLOC);
+  	}
+  	memset(client->origin, 0, strlen(origin)+1);
+  	strncpy(client->origin, origin, strlen(origin));
+  }
+  else {
+    client->origin=NULL;
+  }
 	client->flags |= CLIENT_CONNECTING;
 	pthread_mutex_unlock(&client->lock);
 
@@ -678,7 +694,12 @@ void *libwsclient_handshake_thread(void *ptr) {
 		snprintf(request_host, 255, "%s", host);
 	}
 
-	snprintf(request_headers, 1024, "GET %s HTTP/1.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nHost: %s\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n", path, request_host, websocket_key);
+	if(client->origin) {
+    snprintf(request_headers, 1024, "GET %s HTTP/1.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nHost: %s\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\nOrigin: %s\r\n\r\n", path, request_host, websocket_key,client->origin);
+  }
+  else {
+    snprintf(request_headers, 1024, "GET %s HTTP/1.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nHost: %s\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n", path, request_host, websocket_key);
+  }
 	n = _libwsclient_write(client, request_headers, strlen(request_headers));
 	z = 0;
 	memset(recv_buf, 0, 1024);
@@ -780,7 +801,7 @@ void *libwsclient_handshake_thread(void *ptr) {
 		}
 		return NULL;
 	}
-	if(!(flags & REQUEST_VALID_ACCEPT)) {
+	/*if(!(flags & REQUEST_VALID_ACCEPT)) {
 		if(client->onerror) {
 			err = libwsclient_new_error(WS_HANDSHAKE_BAD_ACCEPT_ERR);
 			client->onerror(client, err);
@@ -788,7 +809,7 @@ void *libwsclient_handshake_thread(void *ptr) {
 			err = NULL;
 		}
 		return NULL;
-	}
+	}*/
 
 
 	pthread_mutex_lock(&client->lock);
